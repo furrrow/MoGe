@@ -28,6 +28,10 @@ dependencies = [
   "flex-gemm @ git+https://github.com/JeffreyXiang/FlexGEMM.git@b2fadb29d41846c7981ade6801ffc689fae119cf",
   "gradio>=6.0",
   "starlette",
+  "open3d>=0.19.0",
+  "custom_utils",
+  "opencv-python>=4.11.0.86",
+  "numba>=0.67.0",
 ]
 
 [project.urls]
@@ -66,5 +70,6 @@ explicit = true
 # or reinstall into the synced environment with
 # `uv pip install --torch-backend=cu128 torch torchvision --reinstall`.
 [tool.uv.sources]
-torch = [{ index = "pytorch-cu130" }]
-torchvision = [{ index = "pytorch-cu130" }]
+custom_utils = { workspace = true }
+#torch = [{ index = "pytorch-cu130" }]
+#torchvision = [{ index = "pytorch-cu130" }]
