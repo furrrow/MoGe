@@ -17,10 +17,10 @@ import open3d as o3d
 from PIL import Image
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import matplotlib.pyplot as plt
-# from moge.model.v2 import MoGeModel
-from moge.model.v3 import MoGeModel # Let's try MoGe-3
+from moge.model.v2 import MoGeModel
+# from moge.model.v3 import MoGeModel # Let's try MoGe-3
 
-from custom_utils.esdf_utils import parse_args, visualize_path_esdf, save_debug_figure
+from custom_utils.esdf_utils import parse_args, visualize_path, save_debug_figure
 from custom_utils.stream_handler import FrameStatus, InputStreamHandler
 from custom_utils.io_utils import colorize_pred, save_depth_video_mp4
 from custom_utils.pointcloud_utils import camera_to_base_transform, pointcloud_to_esdf_pipeline
@@ -30,7 +30,7 @@ def main():
     show_depth_img = True
     save_video_toggle = False
     stream_type = "video" # ["yarp", "video", "webcam"]
-    video_path = "/home/jim/Projects/steernav/services/OnlineVideoDepthAnything/assets/example_videos/Cars_and_Gasstation.mp4"
+    video_path = "/home/jim/Projects/steernav/assets/Cars_and_Gasstation.mp4"
     output_folder = "demo_video"
     webcam_index = 0
     yarp_port = "/sam3/rgbImage:i"
@@ -38,7 +38,7 @@ def main():
 
     # Load model
     model_name = "Ruicheng/moge-2-vitl-normal"
-    model_name = "Ruicheng/moge-3-vitl"
+    # model_name = "Ruicheng/moge-3-vitl"
     # model_name = "depth-anything/da3nested-giant-large"
     print("running", model_name)
     # model = DepthAnything3.from_pretrained(model_name)
@@ -100,7 +100,7 @@ def main():
             With `return_per_step=True`, `points_per_step`, `depth_per_step`, and `intrinsics_per_step`
             contain `refine_steps + 1` entries, including the initial prediction.
             """
-            # depth = output['depth'].cpu().numpy()
+            depth = output['depth'].cpu().numpy()
             # pred_color = colorize_pred(depth, vmin=0, vmax=10, add_colorbar=True)
 
             # if show_depth_img:
@@ -128,8 +128,8 @@ def main():
                                                       y_min=args.y_min, y_max=args.y_max,
                                                       )
 
-            # esdf_surface = plot_esdf_surface(depth=depth, rgb=frame_rgb,
-            #                            result=esdf_result, idx=frame_idx, args=args)
+            # esdf_surface = visualize_path(depth=depth, rgb=frame_rgb,
+            #                               esdf_result=esdf_result, idx=frame_idx, args=args)
             dummy_path = Path(video_path)
             esdf_surface = save_debug_figure(pointcloud_path=dummy_path, rgb=frame_rgb,
                                              metadata=None, full_image_size=None,

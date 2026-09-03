@@ -4,62 +4,43 @@ although not using the metric version of DA2
 
 
 """
-import argparse
-import os
 import time
-from pathlib import Path
-
 import cv2
-import torch
 import numpy as np
 import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForCausalLM
-
-import open3d as o3d
-from typing import Any, Dict, List, Optional, Sequence, Tuple
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from moge.model.v2 import MoGeModel
-
-from custom_utils.esdf_utils import parse_args, visualize_path_esdf, save_debug_figure
 from custom_utils.stream_handler import FrameStatus, InputStreamHandler
-from custom_utils.io_utils import colorize_pred, save_depth_video_mp4
-from custom_utils.pointcloud_utils import camera_to_base_transform, pointcloud_to_esdf_pipeline
+from custom_utils.io_utils import save_depth_video_mp4, plot_bbox
+import supervision as sv
+import argparse
+from argparse import Namespace
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="argparse for bytetracker."
+    )
+    parser.add_argument("--var_x", type=float, default=1, help="some var.")
+    parser.add_argument("--track-thresh", type=float, default=0.65, help="track thresh")
+    parser.add_argument("--match-thresh", type=float, default=0.7, help="track thresh")
+    parser.add_argument("--track-buffer", type=int, default=15, help="track thresh")
+    parser.add_argument("--mot20", type=bool, default=True, help="mot20 benchmark, no confidence fusion if true")
+    return parser.parse_args()
 
 
-def plot_bbox(image, data, show_plot=True, return_img=False):
-    # Create a figure and axes
-    fig, ax = plt.subplots()
-
-    # Display the image
-    ax.imshow(image)
-
-    # Plot each bounding box
-    for bbox, label in zip(data['bboxes'], data['labels']):
-        # Unpack the bounding box coordinates
+def filter_unwanted_results(bbox_result, img_w, img_h):
+    total_img_area = img_w * img_h
+    filtered_results = {
+        'bboxes': [],
+        'labels': []
+    }
+    for bbox, label in zip(bbox_result['bboxes'], bbox_result['labels']):
         x1, y1, x2, y2 = bbox
-        # Create a Rectangle patch
-        rect = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=1, edgecolor='r', facecolor='none')
-        # Add the rectangle to the Axes
-        ax.add_patch(rect)
-        # Annotate the label
-        plt.text(x1, y1, label, color='white', fontsize=8, bbox=dict(facecolor='red', alpha=0.5))
-
-        # Remove the axis ticks and labels
-    ax.axis('off')
-
-    # Show the plot
-    if show_plot:
-        plt.show()
-    if return_img:
-        # Render the Matplotlib figure into an RGB NumPy array.
-        fig.canvas.draw()
-        image_rgb = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy()
-        plt.close(fig)
-        return image_rgb
-    return None
-
+        box_area = (x2 - x1) * (y2 - y1)
+        if (total_img_area * 0.01 ) < box_area < (total_img_area * 0.8 ):
+            filtered_results['bboxes'].append(bbox)
+            filtered_results['labels'].append(label)
+    return filtered_results
 
 def main():
     # Initialize predictor (single-GPU streaming)
@@ -85,6 +66,7 @@ def main():
                                                             trust_remote_code=True).to(device)
 
     processor = AutoProcessor.from_pretrained(vision_model_name, trust_remote_code=True)
+    tracker = sv.ByteTrack()
     # Initialize input source
     src = InputStreamHandler(
         kind=stream_type,
@@ -123,32 +105,40 @@ def main():
             prev_time = current_time
 
             frame_rgb = stream_buffer.frame
-            frame_gbr = frame_rgb[:, :, ::-1]
-            frame_rgb = cv2.resize(frame_rgb, dsize=(640, 480), interpolation=cv2.INTER_CUBIC)
+            img_w, img_h = 640, 480
+            frame_rgb = cv2.resize(frame_rgb, dsize=(img_w, img_h), interpolation=cv2.INTER_CUBIC)
             input_image = torch.tensor(frame_rgb / 255, dtype=torch.float32, device=device).permute(2, 0, 1)
 
             task_prompt = "<CAPTION_TO_PHRASE_GROUNDING>"
-            text_input = "people"
-            prompt = task_prompt + text_input
+            text_prompt = "people"
+            prompt = task_prompt + text_prompt
             pil_image = Image.fromarray(frame_rgb)
-            inputs = processor(text=prompt, images=pil_image, return_tensors="pt").to(device, torch_dtype)
+            obj_detect_inputs = processor(text=prompt, images=frame_rgb, return_tensors="pt").to(device, torch_dtype)
 
             generated_ids = obj_detect_model.generate(
-                input_ids=inputs["input_ids"],
-                pixel_values=inputs["pixel_values"],
+                input_ids=obj_detect_inputs["input_ids"],
+                pixel_values=obj_detect_inputs["pixel_values"],
                 max_new_tokens=4096,
                 num_beams=3,
                 do_sample=False
             )
             generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
 
-            parsed_answer = processor.post_process_generation(generated_text, task=task_prompt,
+            obj_detect_result = processor.post_process_generation(generated_text, task=task_prompt,
                                                               image_size=(pil_image.width, pil_image.height))
-
-            # print(parsed_answer)
-            pred_color = plot_bbox(pil_image, parsed_answer[task_prompt],
-                                     show_plot=False, return_img=True)
-
+            bbox_result=obj_detect_result[task_prompt]
+            bbox_result = filter_unwanted_results(bbox_result, img_w, img_h)
+            # bbox_result format: dict_keys(['bboxes', 'labels'])
+            # bboxes: [[x1, y1, x2, y2]...] labels: ['people' ...]
+            bbox_only = [bbox for bbox, label in zip(bbox_result['bboxes'], bbox_result['labels'])]
+            if len(bbox_only) > 0:
+                dummy_confidence = np.ones(len(bbox_only)) * 0.7
+                sv_detection = sv.Detections(xyxy=np.array(bbox_only), confidence=dummy_confidence)
+                detections = tracker.update_with_detections(sv_detection)
+                print(detections)
+                pred_color = plot_bbox(frame_rgb, bbox_result, detections.tracker_id, show_plot=False, return_img=True)
+            else:
+                pred_color = frame_rgb
             if show_img:
                 # Display FPS
                 cv2.putText(pred_color,f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
