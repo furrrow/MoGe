@@ -11,10 +11,10 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForCausalLM
 from custom_utils.stream_handler import FrameStatus, InputStreamHandler
-from custom_utils.io_utils import save_depth_video_mp4, plot_bbox
+from custom_utils.io_utils import save_depth_video_mp4, plot_bbox, filter_unwanted_results
 import supervision as sv
 import argparse
-from argparse import Namespace
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -27,20 +27,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mot20", type=bool, default=True, help="mot20 benchmark, no confidence fusion if true")
     return parser.parse_args()
 
-
-def filter_unwanted_results(bbox_result, img_w, img_h):
-    total_img_area = img_w * img_h
-    filtered_results = {
-        'bboxes': [],
-        'labels': []
-    }
-    for bbox, label in zip(bbox_result['bboxes'], bbox_result['labels']):
-        x1, y1, x2, y2 = bbox
-        box_area = (x2 - x1) * (y2 - y1)
-        if (total_img_area * 0.01 ) < box_area < (total_img_area * 0.8 ):
-            filtered_results['bboxes'].append(bbox)
-            filtered_results['labels'].append(label)
-    return filtered_results
 
 def main():
     # Initialize predictor (single-GPU streaming)
