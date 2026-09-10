@@ -13,7 +13,7 @@ requires-python = ">=3.10"
 dependencies = [
   "click>=8.3.1",
   "numpy",
-  "opencv-python-headless", # ==4.10.0.84 if any issue with OpenCV
+#  "opencv-python-headless", # ==4.10.0.84 if any issue with OpenCV
   "scipy>=1.8",
   "pillow",
   "matplotlib",
