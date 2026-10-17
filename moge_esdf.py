@@ -4,23 +4,14 @@ although not using the metric version of DA2
 
 
 """
-import argparse
-import os
 import time
-from email.mime import image
-from pathlib import Path
-
 import cv2
 import torch
 import numpy as np
-import open3d as o3d
-from PIL import Image
-from typing import Any, Dict, List, Optional, Sequence, Tuple
-import matplotlib.pyplot as plt
 from moge.model.v2 import MoGeModel
 # from moge.model.v3 import MoGeModel # Let's try MoGe-3
 
-from custom_utils.esdf_utils import parse_args, visualize_path, save_debug_figure
+from custom_utils.esdf_utils import parse_args, visualize_esdf
 from custom_utils.stream_handler import FrameStatus, InputStreamHandler
 from custom_utils.io_utils import colorize_pred, save_depth_video_mp4
 from custom_utils.pointcloud_utils import camera_to_base_transform, pointcloud_to_esdf_pipeline
@@ -35,22 +26,19 @@ def main():
     webcam_index = 0
     yarp_port = "/sam3/rgbImage:i"
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    args = parse_args()
 
     # Load model
     model_name = "Ruicheng/moge-2-vitl-normal"
     # model_name = "Ruicheng/moge-3-vitl"
     # model_name = "depth-anything/da3nested-giant-large"
     print("running", model_name)
-    # model = DepthAnything3.from_pretrained(model_name)
-    # model = model.to(device).eval()
     model = MoGeModel.from_pretrained(model_name).to(device).eval()
     # Initialize input source
     src = InputStreamHandler(
         kind=stream_type,
         video_path=video_path,
         webcam_index=webcam_index,
-        # fps_request=2,
-        yarp_port_name=yarp_port,
     )
     print(f"Opening source: {stream_type}")
     src.open()
@@ -100,26 +88,9 @@ def main():
             With `return_per_step=True`, `points_per_step`, `depth_per_step`, and `intrinsics_per_step`
             contain `refine_steps + 1` entries, including the initial prediction.
             """
-            depth = output['depth'].cpu().numpy()
-            # pred_color = colorize_pred(depth, vmin=0, vmax=10, add_colorbar=True)
-
-            # if show_depth_img:
-            #     # Display FPS
-            #     cv2.putText(pred_color,f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-            #         1,(0, 255, 0),2)
-            #     pred_color = cv2.resize(pred_color, (640, 480))
-            #     cv2.imshow(
-            #         f"{stream_type}", cv2.cvtColor(pred_color, cv2.COLOR_RGB2BGR)
-            #     )
-            #     # cv2.imshow("Livestream", img_after, cv2.COLOR_RGB2BGR)
-            #     if cv2.waitKey(1) & 0xFF == ord("q"):
-            #         stop_processing = True
-
             moge_points = output['points'].cpu().numpy()
             points_input = moge_points.astype(np.float32, copy=True)
             points_input[~output["mask"].cpu().numpy().astype(bool)] = np.nan
-
-            args = parse_args()
 
             rotation, translation = camera_to_base_transform(camera_height=args.camera_height)
             esdf_result = pointcloud_to_esdf_pipeline(points_input, h_min=args.h_min, h_max=args.h_max,
@@ -128,12 +99,7 @@ def main():
                                                       y_min=args.y_min, y_max=args.y_max,
                                                       )
 
-            # esdf_surface = visualize_path(depth=depth, rgb=frame_rgb,
-            #                               esdf_result=esdf_result, idx=frame_idx, args=args)
-            dummy_path = Path(video_path)
-            esdf_surface = save_debug_figure(pointcloud_path=dummy_path, rgb=frame_rgb,
-                                             metadata=None, full_image_size=None,
-                                             result=esdf_result, args=args)
+            esdf_surface = visualize_esdf(esdf_result=esdf_result, args=args)
             window_name = "esdf_surface"
             # Create a resizable window
             cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)

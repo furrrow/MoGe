@@ -58,8 +58,6 @@ def main():
         kind=stream_type,
         video_path=video_path,
         webcam_index=webcam_index,
-        # fps_request=2,
-        yarp_port_name=yarp_port,
     )
     print(f"Opening source: {stream_type}")
     src.open()
@@ -150,12 +148,7 @@ def main():
             #                                           y_min=args.y_min, y_max=args.y_max,
             #                                           )
             #
-            # # esdf_surface = plot_esdf_surface(depth=depth, rgb=frame_rgb,
-            # #                            result=esdf_result, idx=frame_idx, args=args)
-            # dummy_path = Path(video_path)
-            # esdf_surface = save_debug_figure(pointcloud_path=dummy_path, rgb=frame_rgb,
-            #                                  metadata=None, full_image_size=None,
-            #                                  result=esdf_result, args=args)
+            # esdf_surface = visualize_esdf(esdf_result=esdf_result, args=args)
             # window_name = "esdf_surface"
             # # Create a resizable window
             # cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
