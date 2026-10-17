@@ -4,19 +4,40 @@ although not using the metric version of DA2
 
 
 """
+import argparse
 import time
+
 import cv2
-import torch
 import numpy as np
+import torch
 from moge.model.v2 import MoGeModel
 # from moge.model.v3 import MoGeModel # Let's try MoGe-3
 
-from custom_utils.esdf_utils import parse_args, visualize_esdf
+from custom_utils.esdf_utils import visualize_esdf
 from custom_utils.stream_handler import FrameStatus, InputStreamHandler
-from custom_utils.io_utils import colorize_pred, save_depth_video_mp4
+from custom_utils.io_utils import save_depth_video_mp4
 from custom_utils.pointcloud_utils import camera_to_base_transform, pointcloud_to_esdf_pipeline
 
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run MoGe depth estimation and visualize the resulting ESDF."
+    )
+    parser.add_argument("--camera-height", type=float, default=1.5)
+    parser.add_argument("--h-min", type=float, default=0.3)
+    parser.add_argument("--h-max", type=float, default=2.0)
+    parser.add_argument("--x-min", type=float, default=0.0)
+    parser.add_argument("--x-max", type=float, default=25.0)
+    parser.add_argument("--y-min", type=float, default=-10.0)
+    parser.add_argument("--y-max", type=float, default=10.0)
+    parser.add_argument("--sensor-x", type=float, default=0.0)
+    parser.add_argument("--sensor-y", type=float, default=0.0)
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
     # Initialize predictor (single-GPU streaming)
     show_depth_img = True
     save_video_toggle = False
@@ -26,7 +47,6 @@ def main():
     webcam_index = 0
     yarp_port = "/sam3/rgbImage:i"
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    args = parse_args()
 
     # Load model
     model_name = "Ruicheng/moge-2-vitl-normal"
@@ -97,6 +117,7 @@ def main():
                                                       R=rotation, t=translation,
                                                       x_min=args.x_min, x_max=args.x_max,
                                                       y_min=args.y_min, y_max=args.y_max,
+                                                      sensor_xy=(args.sensor_x, args.sensor_y),
                                                       )
 
             esdf_surface = visualize_esdf(esdf_result=esdf_result, args=args)
